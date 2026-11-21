@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>محول Excel الذكي — نسخة تجريبية</title>
+<!-- ============================= الستايل (CSS) ============================= -->
+<style>
+  /* ---------- الخط المحلي ---------- */
+  @font-face { font-family:"Tajawal"; src:url("fonts/Tajawal-Regular.ttf"); font-weight:400; }
+  @font-face { font-family:"Tajawal"; src:url("fonts/Tajawal-Medium.ttf");  font-weight:500; }
+  @font-face { font-family:"Tajawal"; src:url("fonts/Tajawal-Bold.ttf");    font-weight:700; }
+
+  /* ---------- متغيرات الألوان ---------- */
+  :root{
+    --navy:#10243B;  --teal:#0F766E;  --accent:#14B8A6;
+    --bg:#F1F5F9;    --card:#FFFFFF;  --ink:#1E293B;  --muted:#64748B;
+    --ok:#16A34A;    --warn:#D97706;  --bad:#DC2626;
+    --radius:16px;
+    --shadow:0 1px 3px rgba(16,36,59,.08),0 4px 14px rgba(16,36,59,.06);
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ font-family:"Tajawal","Segoe UI",Tahoma,Arial,sans-serif; background:var(--bg); color:var(--ink); min-height:100vh; }
+  .num{ direction:ltr; unicode-bidi:embed; font-variant-numeric:tabular-nums; }
+  button{ font-family:inherit; cursor:pointer; }
+  select,input{ font-family:inherit; }
+
+  /* ---------- الترويسة ---------- */
+  header{ background:var(--navy); color:#fff; padding:28px 20px; }
+  .header-in{ max-width:1100px; margin:auto; display:flex; flex-wrap:wrap; gap:16px; align-items:center; justify-content:space-between; }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .brand .logo{ width:52px; height:52px; border-radius:14px; background:var(--accent); display:flex; align-items:center; justify-content:center; font-size:26px; }
+  .brand h1{ font-size:22px; font-weight:700; }
+  .brand p{ font-size:12px; color:#94A3B8; margin-top:2px; }
+  .pill{ background:rgba(255,255,255,.1); color:var(--accent); border:1px solid rgba(20,184,166,.35); padding:6px 14px; border-radius:999px; font-size:12px; font-weight:700; }
+
+  /* ---------- التخطيط ---------- */
+  main{ max-width:1100px; margin:24px auto 60px; padding:0 16px; display:flex; flex-direction:column; gap:20px; }
+  .card{ background:var(--card); border:1px solid #E2E8F0; border-radius:var(--radius); box-shadow:var(--shadow); padding:22px; }
+  .card h2{ font-size:17px; color:var(--navy); display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  .card h2 .step{ width:30px; height:30px; border-radius:10px; background:var(--navy); color:var(--accent); display:inline-flex; align-items:center; justify-content:center; font-size:14px; font-weight:700; flex-shrink:0; }
+  .card .sub{ font-size:13px; color:var(--muted); margin-bottom:16px; line-height:1.7; }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media (max-width:820px){ .grid2{ grid-template-columns:1fr; } }
+  .hidden{ display:none !important; }
+
+  /* ---------- منطقة الإفلات ---------- */
+  .drop{ border:2px dashed #CBD5E1; border-radius:14px; background:#F8FAFC; padding:30px 16px; text-align:center; cursor:pointer; transition:.15s; }
+  .drop:hover,.drop.over{ border-color:var(--teal); background:#F0FDFA; }
+  .drop .ic{ font-size:30px; }
+  .drop b{ display:block; color:var(--navy); margin:8px 0 4px; font-size:15px; }
+  .drop span{ font-size:12px; color:var(--muted); }
+  .file-chip{ display:flex; align-items:center; gap:10px; background:#F0FDFA; border:1px solid #99F6E4; color:var(--teal); border-radius:12px; padding:10px 14px; margin-top:12px; font-size:13px; font-weight:700; }
+  .file-chip .x{ margin-inline-start:auto; background:none; border:none; color:var(--muted); font-size:16px; }
+  select.sel{ width:100%; margin-top:10px; padding:10px 12px; border:1px solid #CBD5E1; border-radius:10px; background:#fff; font-size:13px; color:var(--ink); }
+
+  /* ---------- أزرار ---------- */
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; border:none; border-radius:12px; padding:12px 22px; font-size:14px; font-weight:700; transition:.15s; }
+  .btn:disabled{ opacity:.45; cursor:not-allowed; }
+  .btn-primary{ background:var(--teal); color:#fff; }
+  .btn-primary:hover:not(:disabled){ background:var(--accent); }
+  .btn-navy{ background:var(--navy); color:#fff; }
+  .btn-navy:hover:not(:disabled){ background:#1B3A5C; }
+  .btn-outline{ background:#fff; border:1px solid #CBD5E1; color:var(--ink); }
+  .btn-outline:hover:not(:disabled){ border-color:var(--teal); color:var(--teal); }
+  .row-actions{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+
+  /* ---------- المطابقة ---------- */
+  .alert{ border-radius:12px; padding:12px 16px; font-size:13px; font-weight:700; margin-bottom:14px; display:flex; gap:10px; align-items:center; }
+  .alert.ok{ background:#F0FDF4; border:1px solid #BBF7D0; color:var(--ok); }
+  .alert.warn{ background:#FFFBEB; border:1px solid #FDE68A; color:var(--warn); }
+  .map-table{ width:100%; border-collapse:collapse; font-size:13px; }
+  .map-table th{ background:var(--bg); color:var(--muted); font-size:12px; text-align:start; padding:10px 12px; border-bottom:1px solid #E2E8F0; }
+  .map-table td{ padding:10px 12px; border-bottom:1px solid #F1F5F9; vertical-align:middle; }
+  .map-table tr:hover td{ background:#F8FAFC; }
+  .req{ color:var(--bad); }
+  .conf{ display:inline-block; padding:3px 10px; border-radius:999px; font-size:11px; font-weight:700; }
+  .conf.hi{ background:#F0FDF4; color:var(--ok); }
+  .conf.md{ background:#FFFBEB; color:var(--warn); }
+  .conf.lo{ background:#FEF2F2; color:var(--bad); }
+  .conf.no{ background:#F1F5F9; color:var(--muted); }
+  .arrow{ color:#CBD5E1; text-align:center; }
+  .chips{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .chip{ background:#F1F5F9; border:1px solid #E2E8F0; color:var(--muted); border-radius:999px; padding:5px 12px; font-size:12px; font-weight:700; }
+
+  /* ---------- المعاينة ---------- */
+  .stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:16px; }
+  @media (max-width:640px){ .stats{ grid-template-columns:1fr; } }
+  .stat{ background:var(--bg); border-radius:12px; padding:14px; text-align:center; }
+  .stat b{ display:block; font-size:22px; color:var(--navy); }
+  .stat span{ font-size:11px; color:var(--muted); font-weight:700; }
+  .table-wrap{ overflow:auto; max-height:480px; border:1px solid #E2E8F0; border-radius:12px; }
+  table.data{ width:100%; border-collapse:collapse; font-size:13px; min-width:640px; }
+  table.data th{ position:sticky; top:0; background:var(--navy); color:#fff; padding:10px; font-size:12px; white-space:nowrap; z-index:2; }
+  table.data td{ border:1px solid #E2E8F0; padding:7px 10px; background:#fff; max-width:220px; }
+  table.data tr:nth-child(even) td{ background:#F8FAFC; }
+  table.data tr.dup td{ background:#FFFBEB; }
+  table.data td.empty{ background:#FEF2F2; }
+  table.data td[contenteditable]:focus{ outline:2px solid var(--accent); background:#fff; }
+  .issues{ margin:12px 0; font-size:13px; }
+  .issues li{ margin:4px 18px; color:var(--ink); }
+  .issues li.bad{ color:var(--bad); font-weight:700; }
+
+  /* ---------- إشعارات ---------- */
+  #toasts{ position:fixed; bottom:20px; inset-inline-start:20px; display:flex; flex-direction:column; gap:8px; z-index:99; }
+  .toast{ color:#fff; padding:12px 18px; border-radius:12px; font-size:13px; font-weight:700; box-shadow:0 8px 24px rgba(16,36,59,.25); animation:in .2s ease; max-width:320px; }
+  .toast.ok{ background:var(--ok); } .toast.err{ background:var(--bad); } .toast.info{ background:var(--navy); }
+  @keyframes in{ from{ transform:translateY(8px); opacity:0 } to{ transform:none; opacity:1 } }
+
+  footer{ text-align:center; color:var(--muted); font-size:12px; padding:20px; }
+
+  /* ---------- الطباعة (تصدير PDF) ---------- */
+  @media print{
+    body{ background:#fff; }
+    header,footer,#toasts,.no-print{ display:none !important; }
+    main{ margin:0; padding:0; max-width:none; }
+    .card{ box-shadow:none; border:none; padding:0; }
+    .table-wrap{ max-height:none; overflow:visible; border:none; }
+    table.data th{ background:#10243B !important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-in">
+    <div class="brand">
+      <div class="logo">📊</div>
+      <div>
+        <h1>محول Excel الذكي</h1>
+        <p>نسخة تجريبية تعمل بالكامل داخل المتصفح — بدون خادم</p>
+      </div>
+    </div>
+    <span class="pill">⚡ تجربة أولية قبل التحويل إلى Backend</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ الخطوة 1+2: رفع الملفات ============ -->
+  <div class="grid2">
+    <section class="card">
+      <h2><span class="step">1</span> رفع ملف البيانات</h2>
+      <p class="sub">الملف المصدر الذي يحتوي على بياناتك الخام (يدعم xlsx / xls / csv).</p>
+      <div class="drop" id="dropData">
+        <div class="ic">📁</div>
+        <b>اسحب ملف البيانات هنا أو انقر للاختيار</b>
+        <span>سيتم قراءة الملف محلياً في متصفحك</span>
+      </div>
+      <input type="file" id="fileData" accept=".xlsx,.xlsm,.xls,.csv" class="hidden" />
+      <div id="dataInfo"></div>
+    </section>
+
+    <section class="card">
+      <h2><span class="step">2</span> رفع الفورمة المطلوبة</h2>
+      <p class="sub">ملف القالب (الوجهة) الذي تريد تحويل البيانات إليه — صف العناوين فيه يحدد الخانات.</p>
+      <div class="drop" id="dropTpl">
+        <div class="ic">📋</div>
+        <b>اسحب ملف الفورمة هنا أو انقر للاختيار</b>
+        <span>علّم الحقول المطلوبة بـ * في عنوان العمود</span>
+      </div>
+      <input type="file" id="fileTpl" accept=".xlsx,.xlsm,.xls,.csv" class="hidden" />
+      <div id="tplInfo"></div>
+    </section>
+  </div>
+
+  <!-- ============ الخطوة 3: المطابقة الذكية ============ -->
+  <section class="card hidden" id="mapCard">
+    <h2><span class="step">3</span> المطابقة الذكية للأعمدة</h2>
+    <p class="sub">
+      مطابقات مقترحة تلقائياً (قاموس مرادفات عربي/إنجليزي + تشابه نصي) مع درجة الثقة لكل مطابقة.
+      يمكنك تعديل أي مطابقة من القائمة المنسدلة.
+    </p>
+    <div id="mapAlert"></div>
+    <div class="table-wrap" style="max-height:none">
+      <table class="map-table">
+        <thead>
+          <tr>
+            <th style="width:34%">خانات الفورمة المطلوبة</th>
+            <th style="width:6%" class="arrow">↔</th>
+            <th style="width:38%">أعمدة الملف الأصلي</th>
+            <th style="width:22%">درجة الثقة</th>
+          </tr>
+        </thead>
+        <tbody id="mapBody"></tbody>
+      </table>
+    </div>
+    <div id="unmatchedBox"></div>
+    <div class="row-actions" style="margin-top:16px">
+      <button class="btn btn-primary" id="btnApprove">✓ اعتماد المطابقة المقترحة</button>
+      <button class="btn btn-navy" id="btnTransform">⚙️ تحويل ومعاينة النتيجة</button>
+    </div>
+  </section>
+
+  <!-- ============ الخطوة 4: المعاينة والتصدير ============ -->
+  <section class="card hidden" id="prevCard">
+    <h2><span class="step">4</span> معاينة النتيجة النهائية</h2>
+    <p class="sub">انقر على أي خلية لتعديلها مباشرة قبل التصدير.</p>
+    <div class="stats">
+      <div class="stat"><b class="num" id="stRows">0</b><span>إجمالي الصفوف</span></div>
+      <div class="stat"><b class="num" id="stDup">0</b><span>صفوف مكررة</span></div>
+      <div class="stat"><b class="num" id="stIss">0</b><span>ملاحظات التحقق</span></div>
+    </div>
+    <div id="issuesBox" class="issues"></div>
+    <div class="table-wrap"><table class="data" id="prevTable"></table></div>
+    <div class="row-actions no-print" style="margin-top:16px">
+      <button class="btn btn-primary" id="btnXlsx">⬇️ تحميل ملف Excel</button>
+      <button class="btn btn-outline" id="btnCsv">⬇️ تصدير CSV</button>
+      <button class="btn btn-outline" id="btnPdf">🖨️ تصدير PDF (طباعة)</button>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  محول Excel الذكي — نسخة المتصفح التجريبية · بعد التجربة يمكن ربط هذه الصفحة بخادم FastAPI الموجود (نفس دوال المطابقة والتحويل)
+</footer>
+
+<div id="toasts"></div>
+
+<!-- مكتبة SheetJS لقراءة وكتابة ملفات Excel محلياً -->
+<script src="vendor/xlsx.full.min.js"></script>
+
+<!-- ============================= الجافاسكربت (JS) ============================= -->
+<script>
+"use strict";
+
+/* ================================================================
+   الحالة العامة
+================================================================ */
+const state = {
+  dataWB: null,        // مصنف ملف البيانات
+  dataSheet: null,     // اسم الورقة المختارة
+  dataCols: [],        // أعمدة المصدر
+  dataRows: [],        // صفوف المصدر (مصفوفات)
+  dataHeaderRow: 0,    // index صف العناوين المكتشف
+  tplCols: [],         // [{name, required}] خانات الفورمة
+  tplHeaderRow: 0,
+  tplSheet: null,
+  tplWB: null,
+  mapping: {},         // { targetField: sourceCol|null }
+  confidence: {},      // { targetField: number }
+  result: [],          // صفوف النتيجة بعد التحويل
+  resultCols: [],      // أسماء أعمدة النتيجة
+};
+
+/* ================================================================
+   أدوات مساعدة
+================================================================ */
+const $ = (id) => document.getElementById(id);
+
+function toast(kind, msg){
+  const el = document.createElement("div");
+  el.className = "toast " + kind;
+  el.textContent = msg;
+  $("toasts").appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+function cellStr(v){
+  if (v === null || v === undefined) return "";
+  if (v instanceof Date) return v.toISOString().slice(0,10);
+  if (typeof v === "number" && Number.isInteger(v)) return String(v);
+  return String(v).trim();
+}
+
+/* ================================================================
+   محرك المطابقة الذكية (نفس منطق الـ Backend — mapping_engine.py)
+================================================================ */
+function normalize(s){
+  if (s === null || s === undefined) return "";
+  s = String(s).trim().toLowerCase();
+  s = s.replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06ED]/g, "");   // تشكيل
+  s = s.replace(/[أإآٱ]/g,"ا").replace(/ى/g,"ي").replace(/ة/g,"ه")
+       .replace(/ؤ/g,"و").replace(/ئ/g,"ي").replace(/ـ/g,"");
+  s = s.replace(/[^\w\u0600-\u06FF\s]/g," ").replace(/\s+/g," ");
+  return s.trim();
+}
+
+/* قاموس المرادفات: مفهوم ← أسماء بديلة (عربي + إنجليزي) */
+const SYNONYMS = {
+  full_name:["الاسم","الاسم الكامل","اسم العميل","اسم الموظف","الاسم الرباعي","اسم الشخص","name","full name","client name","customer name","employee name"],
+  first_name:["الاسم الاول","first name","given name"],
+  last_name:["اسم العائله","الاسم الاخير","last name","family name","surname"],
+  phone:["الهاتف","رقم الهاتف","الجوال","رقم الجوال","الموبايل","رقم الموبايل","التليفون","phone","phone number","mobile","mobile number","tel","telephone","cell"],
+  email:["البريد الالكتروني","البريد","الايميل","email","e-mail","mail","email address"],
+  national_id:["رقم الهويه","الهويه","السجل المدني","الرقم القومي","national id","id number","civil id"],
+  id:["الرقم","رقم","المعرف","الكود","الترتيب","id","no","number","code","ref","reference"],
+  address:["العنوان","عنوان","الموقع","الشارع","address","street","location"],
+  city:["المدينه","مدينة","city","town"],
+  district:["الحي","district","neighborhood"],
+  country:["الدوله","البلد","country"],
+  date:["التاريخ","تاريخ","الميلاد","تاريخ الميلاد","date","birth date","dob"],
+  hire_date:["تاريخ التعيين","تاريخ الانضمام","تاريخ المباشره","hire date","join date","start date"],
+  created_at:["تاريخ الانشاء","تاريخ الاضافه","created at","creation date"],
+  amount:["المبلغ","مبلغ","القيم","الاجمالي","مجموع","amount","value","total","sum"],
+  price:["السعر","سعر","سعر الوحده","price","unit price","cost"],
+  quantity:["الكميه","كميه","العدد","quantity","qty","count"],
+  company:["الشركه","المؤسسه","جهه العمل","company","organization","employer","entity"],
+  department:["القسم","الاداره","department","dept","division"],
+  job_title:["المسمي الوظيفي","الوظيفه","job title","position","role"],
+  notes:["ملاحظات","ملاحظه","تعليق","notes","note","remarks","comments"],
+  status:["الحاله","الوضع","status","state"],
+  product:["المنتج","اسم المنتج","product","item","item name","service"],
+  invoice_no:["رقم الفاتوره","فاتوره","invoice","invoice number","bill number"],
+  gender:["الجنس","النوع","gender","sex"],
+  salary:["الراتب","salary","wage","pay"],
+  discount:["الخصم","التخفيض","discount"],
+  tax:["الضريبه","ضريبه القيمه المضافه","tax","vat"],
+  website:["الموقع الالكتروني","website","url","web"],
+  iban:["الايبان","رقم الحساب","iban","account number","bank account"],
+};
+
+/* خرائط البحث */
+const ALIAS2CONCEPT = {};
+for (const [concept, aliases] of Object.entries(SYNONYMS)){
+  ALIAS2CONCEPT[normalize(concept.replace(/_/g," "))] = concept;
+  for (const a of aliases) ALIAS2CONCEPT[normalize(a)] = concept;
+}
+function conceptOf(col){
+  const n = normalize(col);
+  if (!n) return null;
+  if (ALIAS2CONCEPT[n]) return ALIAS2CONCEPT[n];
+  for (const tok of n.split(" ")){
+    if (ALIAS2CONCEPT[tok]) return ALIAS2CONCEPT[tok];
+  }
+  return null;
+}
+
+/* تشابه نصي: أطول تتابع مشترك + تشابه الثنائيات (Dice) */
+function lcsRatio(a,b){
+  const m=a.length,n=b.length;
+  if(!m||!n) return 0;
+  let prev=new Array(n+1).fill(0), cur=new Array(n+1).fill(0);
+  for(let i=1;i<=m;i++){
+    for(let j=1;j<=n;j++){
+      cur[j] = a[i-1]===b[j-1] ? prev[j-1]+1 : Math.max(prev[j],cur[j-1]);
+    }
+    [prev,cur]=[cur,prev]; cur.fill(0);
+  }
+  return prev[n]/Math.max(m,n);
+}
+function bigrams(s){
+  const set=new Set();
+  for(let i=0;i<s.length-1;i++) set.add(s.slice(i,i+2));
+  return set;
+}
+function dice(a,b){
+  const A=bigrams(a),B=bigrams(b);
+  if(!A.size||!B.size) return 0;
+  let hit=0; for(const g of A) if(B.has(g)) hit++;
+  return 2*hit/(A.size+B.size);
+}
+function similarity(a,b){
+  const na=normalize(a), nb=normalize(b);
+  if(!na||!nb) return 0;
+  if(na===nb) return 1;
+  const ta=new Set(na.split(" ").filter(x=>x&&!["ال","في","من","the","a","of"].includes(x)));
+  const tb=new Set(nb.split(" ").filter(x=>x&&!["ال","في","من","the","a","of"].includes(x)));
+  let inter=0; for(const t of ta) if(tb.has(t)) inter++;
+  const jac = (ta.size||tb.size) ? inter/(ta.size+tb.size-inter) : 0;
+  return Math.max(lcsRatio(na,nb), dice(na,nb), jac);
+}
+
+/* فحص توافق نوع القيم مع الخانة المستهدفة */
+function looksLike(samples, targetName){
+  const vals = samples.filter(v=>v!=="").slice(0,5);
+  if(!vals.length) return true;
+  const c = conceptOf(targetName);
+  if(["phone","national_id","iban","id","invoice_no"].includes(c))
+    return vals.every(v=>/^[\d\s+\-().]{6,}$/.test(v));
+  if(c==="email") return vals.every(v=>v.includes("@"));
+  if(["amount","price","quantity","salary","discount","tax"].includes(c))
+    return vals.every(v=>/^-?[\d.,]+\s*[\w%]*$/.test(v));
+  if(c==="date"||c==="hire_date") return vals.every(v=>/\d{1,4}[-/.]\d{1,2}/.test(v));
+  return true;
+}
+
+function scorePair(src,tgt,samples){
+  const sc=conceptOf(src), tc=conceptOf(tgt);
+  let score=0, reason="تشابه نصي";
+  if(sc && tc && sc===tc){
+    score = normalize(src)===normalize(tgt) ? 0.96 : 0.90;
+    reason="قاموس المرادفات";
+  } else {
+    const sim = similarity(src,tgt);
+    if(sim>=0.5){ score=Math.min(sim,0.89); }
+  }
+  if(score>0 && samples && samples.length){
+    if(looksLike(samples,tgt)) score=Math.min(0.99,score+0.03);
+    else score*=0.5;
+  }
+  return {score,reason};
+}
+
+/* المطابقة العامة الطمعية: أفضل الدرجات تُسنَد أولاً */
+function suggestMapping(sourceCols, targetCols, samples){
+  const cands=[];
+  for(const tgt of targetCols){
+    for(const src of sourceCols){
+      const {score,reason}=scorePair(src,tgt,samples[src]||[]);
+      if(score>=0.45) cands.push({score,tgt,src,reason});
+    }
+  }
+  cands.sort((a,b)=>b.score-a.score);
+  const usedS=new Set(), assigned={};
+  for(const c of cands){
+    if(assigned[c.tgt]||usedS.has(c.src)) continue;
+    assigned[c.tgt]={src:c.src,score:c.score,reason:c.reason};
+    usedS.add(c.src);
+  }
+  const pairs = targetCols.map(tgt=>({
+    target_field:tgt,
+    source_column: assigned[tgt]? assigned[tgt].src : null,
+    confidence: assigned[tgt]? Math.round(assigned[tgt].score*100)/100 : 0,
+    reason: assigned[tgt]? assigned[tgt].reason : "لا توجد مطابقة",
+  }));
+  const unmatched = sourceCols.filter(c=>!usedS.has(c));
+  return {pairs,unmatched};
+}
+
+/* ================================================================
+   قراءة الملفات (SheetJS)
+================================================================ */
+function detectHeaderRow(aoa){
+  // أول صف فيه خليتان غير فارغتين على الأقل ضمن أول 10 صفوف
+  for(let i=0;i<Math.min(10,aoa.length);i++){
+    const filled=(aoa[i]||[]).filter(v=>cellStr(v)!=="").length;
+    if(filled>=2) return i;
+  }
+  return 0;
+}
+
+function readWorkbook(file, cb){
+  const fr=new FileReader();
+  fr.onload=(e)=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{cellDates:true});
+      cb(null,wb);
+    }catch(err){ cb("تعذر قراءة الملف: "+err.message); }
+  };
+  fr.onerror=()=>cb("تعذر قراءة الملف");
+  fr.readAsArrayBuffer(file);
+}
+
+function loadSheetData(wb, sheetName){
+  const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sheetName],{header:1,defval:"",raw:false});
+  const hr = detectHeaderRow(aoa);
+  const cols = (aoa[hr]||[]).map((v,i)=>cellStr(v)||("عمود "+(i+1)));
+  // إزالة الأعمدة الفارغة تماماً من نهاية الرؤوس
+  while(cols.length && /^عمود \d+$/.test(cols[cols.length-1]) &&
+        aoa.slice(hr+1).every(r=>cellStr(r[cols.length-1])==="")) cols.pop();
+  const rows = aoa.slice(hr+1)
+    .map(r=>cols.map((_,i)=>cellStr(r[i])))
+    .filter(r=>r.some(v=>v!==""));
+  const samples={};
+  cols.forEach((c,i)=>{ samples[c]=rows.slice(0,3).map(r=>r[i]).filter(v=>v!==""); });
+  return {headerRow:hr, cols, rows, samples};
+}
+
+/* ================================================================
+   الواجهة: رفع ملف البيانات
+================================================================ */
+function bindDrop(dropId, inputId, handler){
+  const drop=$(dropId), input=$(inputId);
+  drop.addEventListener("click",()=>input.click());
+  input.addEventListener("change",()=>{ if(input.files[0]) handler(input.files[0]); input.value=""; });
+  ["dragover","dragenter"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add("over");}));
+  ["dragleave","drop"].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove("over");}));
+  drop.addEventListener("drop",e=>{ const f=e.dataTransfer.files[0]; if(f) handler(f); });
+}
+
+function onDataFile(file){
+  readWorkbook(file,(err,wb)=>{
+    if(err){ toast("err",err); return; }
+    state.dataWB=wb;
+    state.dataSheet=wb.SheetNames[0];
+    const d=loadSheetData(wb,state.dataSheet);
+    Object.assign(state,{dataCols:d.cols,dataRows:d.rows,dataHeaderRow:d.headerRow,dataSamples:d.samples});
+    // معلومات الملف + اختيار الورقة
+    const sheetsOpt=wb.SheetNames.map(n=>`<option ${n===state.dataSheet?"selected":""}>${n}</option>`).join("");
+    $("dataInfo").innerHTML=`
+      <div class="file-chip">📄 ${file.name}
+        <button class="x" title="إزالة" onclick="resetData()">✕</button></div>
+      ${wb.SheetNames.length>1?`<select class="sel" id="dataSheetSel" onchange="onDataSheet(this.value)">${sheetsOpt}</select>`:""}
+      <div class="file-chip" style="background:#F8FAFC;border-color:#E2E8F0;color:#64748B">
+        <span class="num">${state.dataRows.length}</span>&nbsp;صف ·
+        <span class="num">${state.dataCols.length}</span>&nbsp;عمود ·
+        صف العناوين: <span class="num">${state.dataHeaderRow+1}</span>
+      </div>`;
+    toast("ok","تم قراءة ملف البيانات: "+file.name);
+    refreshMapping();
+  });
+}
+function onDataSheet(name){
+  state.dataSheet=name;
+  const d=loadSheetData(state.dataWB,name);
+  Object.assign(state,{dataCols:d.cols,dataRows:d.rows,dataHeaderRow:d.headerRow,dataSamples:d.samples});
+  refreshMapping();
+}
+function resetData(){
+  Object.assign(state,{dataWB:null,dataSheet:null,dataCols:[],dataRows:[],dataSamples:{}});
+  $("dataInfo").innerHTML="";
+  refreshMapping();
+}
+
+/* ================================================================
+   الواجهة: رفع الفورمة
+================================================================ */
+function onTplFile(file){
+  readWorkbook(file,(err,wb)=>{
+    if(err){ toast("err",err); return; }
+    state.tplWB=wb; state.tplSheet=wb.SheetNames[0];
+    const d=loadSheetData(wb,state.tplSheet);
+    state.tplHeaderRow=d.headerRow;
+    state.tplCols=d.cols.map(name=>({
+      name: name.replace(/\s*\*\s*$/,"").replace("((مطلوب))","").trim(),
+      required: /\*|مطلوب|الزامي|إلزامي/.test(name),
+    }));
+    const sheetsOpt=wb.SheetNames.map(n=>`<option ${n===state.tplSheet?"selected":""}>${n}</option>`).join("");
+    $("tplInfo").innerHTML=`
+      <div class="file-chip">📋 ${file.name}
+        <button class="x" title="إزالة" onclick="resetTpl()">✕</button></div>
+      ${wb.SheetNames.length>1?`<select class="sel" id="tplSheetSel" onchange="onTplSheet(this.value)">${sheetsOpt}</select>`:""}
+      <div class="chips">${state.tplCols.map(c=>
+        `<span class="chip" style="${c.required?"color:#DC2626;border-color:#FECACA;background:#FEF2F2":""}">${c.name}${c.required?" *":""}</span>`).join("")}
+      </div>`;
+    toast("ok","تم قراءة الفورمة: "+file.name);
+    refreshMapping();
+  });
+}
+function onTplSheet(name){
+  state.tplSheet=name;
+  const d=loadSheetData(state.tplWB,name);
+  state.tplHeaderRow=d.headerRow;
+  state.tplCols=d.cols.map(nm=>({
+    name: nm.replace(/\s*\*\s*$/,"").trim(),
+    required: /\*|مطلوب|الزامي|إلزامي/.test(nm),
+  }));
+  refreshMapping();
+}
+function resetTpl(){
+  Object.assign(state,{tplWB:null,tplSheet:null,tplCols:[]});
+  $("tplInfo").innerHTML="";
+  refreshMapping();
+}
+
+/* ================================================================
+   الواجهة: المطابقة
+================================================================ */
+let lastSuggestion=null;
+
+function refreshMapping(){
+  const ready = state.dataCols.length && state.tplCols.length;
+  $("mapCard").classList.toggle("hidden",!ready);
+  if(!ready){ $("prevCard").classList.add("hidden"); return; }
+
+  const targetNames = state.tplCols.map(c=>c.name);
+  const {pairs,unmatched} = suggestMapping(state.dataCols,targetNames,state.dataSamples||{});
+  lastSuggestion={pairs,unmatched};
+  state.mapping={}; state.confidence={};
+  for(const p of pairs){
+    if(p.source_column) state.mapping[p.target_field]=p.source_column;
+    state.confidence[p.target_field]=p.confidence;
+  }
+  renderMapping();
+}
+
+function renderMapping(){
+  const opts=["<option value=''>— بدون مطابقة —</option>"]
+    .concat(state.dataCols.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`)).join("");
+  $("mapBody").innerHTML = state.tplCols.map(col=>{
+    const cur=state.mapping[col.name]||"";
+    const conf=cur? (state.confidence[col.name]||0) : 0;
+    const cls = conf>=0.85?"hi":conf>=0.6?"md":conf>0?"lo":"no";
+    const suggested = lastSuggestion.pairs.find(p=>p.target_field===col.name);
+    return `<tr>
+      <td><b>${esc(col.name)}</b>${col.required?' <span class="req">*</span>':""}
+          <div style="font-size:11px;color:var(--muted)">${col.required?"حقل مطلوب":"حقل اختياري"}</div></td>
+      <td class="arrow">←</td>
+      <td><select class="sel" style="margin:0" onchange="setMap('${esc(col.name)}',this.value)">
+            ${opts.replace(`value="${esc(cur)}"`,`value="${esc(cur)}" selected`)}
+          </select>
+          ${suggested&&suggested.source_column?`<div style="font-size:11px;color:var(--muted);margin-top:4px">
+            💡 اقتراح الذكاء: <b>${esc(suggested.source_column)}</b> (${suggested.reason})</div>`:""}</td>
+      <td><span class="conf ${cls} num">${cur?Math.round(conf*100)+"%":"—"}</span></td>
+    </tr>`;
+  }).join("");
+
+  // تنبيه الحقول المطلوبة الناقصة
+  const missing=state.tplCols.filter(c=>c.required && !state.mapping[c.name]);
+  $("mapAlert").innerHTML = missing.length
+    ? `<div class="alert warn">⚠️ الحقول المطلوبة الناقصة: ${missing.map(c=>c.name).join("، ")}</div>`
+    : `<div class="alert ok">✓ جميع الحقول المطلوبة تمت مطابقتها</div>`;
+
+  // الأعمدة غير المطابقة
+  const used=new Set(Object.values(state.mapping));
+  const un=lastSuggestion.unmatched.filter(c=>!used.has(c));
+  $("unmatchedBox").innerHTML = un.length
+    ? `<div style="margin-top:14px"><b style="font-size:13px;color:var(--navy)">أعمدة لن تُستخدم (غير مطابقة):</b>
+       <div class="chips">${un.map(c=>`<span class="chip">${esc(c)} — تجاهل</span>`).join("")}</div></div>`
+    : "";
+}
+function setMap(target,value){
+  // منع استخدام نفس العمود لخدفتين
+  for(const k of Object.keys(state.mapping)) if(state.mapping[k]===value && value) delete state.mapping[k];
+  if(value) state.mapping[target]=value; else delete state.mapping[target];
+  renderMapping();
+}
+function esc(s){ return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;"); }
+
+$("btnApprove").addEventListener("click",()=>{
+  state.mapping={};
+  for(const p of lastSuggestion.pairs) if(p.source_column) state.mapping[p.target_field]=p.source_column;
+  renderMapping();
+  toast("ok","تم اعتماد المطابقة المقترحة ✓");
+});
+
+/* ================================================================
+   التحويل + التحقق + المعاينة
+================================================================ */
+$("btnTransform").addEventListener("click",()=>{
+  if(!Object.keys(state.mapping).length){ toast("err","لا توجد أي مطابقة معتمدة"); return; }
+  const targets=state.tplCols.map(c=>c.name);
+  state.resultCols=targets;
+  state.result=state.dataRows.map(row=>{
+    const out={};
+    for(const t of targets){
+      const src=state.mapping[t];
+      const idx = src? state.dataCols.indexOf(src) : -1;
+      out[t]= idx>=0 ? (row[idx]||"") : "";
+    }
+    return out;
+  }).filter(r=>targets.some(t=>r[t]!==""));
+
+  validateAndRender();
+  $("prevCard").classList.remove("hidden");
+  $("prevCard").scrollIntoView({behavior:"smooth"});
+  toast("ok",`تم تحويل ${state.result.length} صف بنجاح`);
+});
+
+function validateAndRender(){
+  const cols=state.resultCols, rows=state.result;
+  // تكرارات
+  const seen={}, dups=new Set();
+  rows.forEach((r,i)=>{
+    const k=cols.map(c=>r[c]).join("|");
+    if(seen[k]!==undefined) dups.add(i); else seen[k]=i;
+  });
+  // نواقص
+  const issues=[];
+  for(const c of state.tplCols){
+    const miss=rows.filter(r=>!r[c.name]).length;
+    if(c.required && miss) issues.push({bad:true,msg:`الحقل المطلوب «${c.name}» فارغ في ${miss} صف`});
+    else if(miss===rows.length && rows.length) issues.push({bad:false,msg:`العمود «${c.name}» فارغ تماماً في كل الصفوف`});
+  }
+  if(dups.size) issues.push({bad:false,msg:`تم العثور على ${dups.size} صف مكرر (مظللة بالأصفر)`});
+
+  $("stRows").textContent=rows.length;
+  $("stDup").textContent=dups.size;
+  $("stIss").textContent=issues.length;
+  $("issuesBox").innerHTML = issues.length
+    ? `<ul>${issues.map(i=>`<li class="${i.bad?"bad":""}">${i.bad?"⛔":"⚠️"} ${i.msg}</li>`).join("")}</ul>`
+    : `<div class="alert ok">✓ البيانات سليمة — لا توجد أخطاء تمنع التصدير</div>`;
+
+  // الجدول
+  $("prevTable").innerHTML=`
+    <thead><tr><th>#</th>${cols.map(c=>{
+      const req=state.tplCols.find(x=>x.name===c)?.required;
+      return `<th>${esc(c)}${req?' <span style="color:#14B8A6">*</span>':""}</th>`;}).join("")}</tr></thead>
+    <tbody>${rows.map((r,i)=>`
+      <tr class="${dups.has(i)?"dup":""}">
+        <td class="num" style="color:var(--muted);text-align:center">${i+1}</td>
+        ${cols.map(c=>`<td class="${r[c]===""?"empty":""}" contenteditable="true"
+            data-r="${i}" data-c="${esc(c)}">${esc(r[c])}</td>`).join("")}
+      </tr>`).join("")}
+    </tbody>`;
+  // تعديل مباشر
+  $("prevTable").querySelectorAll("td[contenteditable]").forEach(td=>{
+    td.addEventListener("blur",()=>{
+      const r=+td.dataset.r, c=td.dataset.c;
+      state.result[r][c]=td.textContent.trim();
+    });
+    td.addEventListener("keydown",e=>{ if(e.key==="Enter"){ e.preventDefault(); td.blur(); } });
+  });
+}
+
+/* ================================================================
+   التصدير
+================================================================ */
+function buildSheet(){
+  const aoa=[state.resultCols].concat(state.result.map(r=>state.resultCols.map(c=>r[c])));
+  return XLSX.utils.aoa_to_sheet(aoa);
+}
+$("btnXlsx").addEventListener("click",()=>{
+  if(!state.result.length){ toast("err","لا توجد بيانات للتصدير"); return; }
+  const wb=XLSX.utils.book_new();
+  if(!wb.Workbook) wb.Workbook={};
+  wb.Workbook.Views=[{RTL:true}];               // ورقة باتجاه RTL
+  XLSX.utils.book_append_sheet(wb,buildSheet(),state.tplSheet||"النتيجة");
+  XLSX.writeFile(wb,"النتيجة-المحول-الذكي.xlsx");
+  toast("ok","تم تحميل ملف Excel");
+});
+$("btnCsv").addEventListener("click",()=>{
+  if(!state.result.length){ toast("err","لا توجد بيانات للتصدير"); return; }
+  const csv=XLSX.utils.sheet_to_csv(buildSheet());
+  const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});   // BOM لسلامة العربية
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="النتيجة-المحول-الذكي.csv";
+  a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+  toast("ok","تم تصدير CSV");
+});
+$("btnPdf").addEventListener("click",()=>{
+  if(!state.result.length){ toast("err","لا توجد بيانات للتصدير"); return; }
+  window.print();   // نافذة الطباعة ← حفظ كـ PDF
+});
+
+/* ================================================================
+   ربط الأحداث
+================================================================ */
+bindDrop("dropData","fileData",onDataFile);
+bindDrop("dropTpl","fileTpl",onTplFile);
+</script>
+</body>
+</html>
