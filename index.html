@@ -145,9 +145,9 @@
       <div class="drop" id="dropData">
         <div class="ic">📁</div>
         <b>اسحب ملف البيانات هنا أو انقر للاختيار</b>
-        <span>سيتم قراءة الملف محلياً في متصفحك</span>
+        <span>يقبل أي ملف: xlsx · xls · xlsm · csv وغيرها — القراءة تتم محلياً في متصفحك</span>
       </div>
-      <input type="file" id="fileData" accept=".xlsx,.xlsm,.xls,.csv" class="hidden" />
+      <input type="file" id="fileData" class="hidden" />
       <div id="dataInfo"></div>
     </section>
 
@@ -157,9 +157,9 @@
       <div class="drop" id="dropTpl">
         <div class="ic">📋</div>
         <b>اسحب ملف الفورمة هنا أو انقر للاختيار</b>
-        <span>علّم الحقول المطلوبة بـ * في عنوان العمود</span>
+        <span>يقبل أي ملف Excel — علّم الحقول المطلوبة بـ * في عنوان العمود</span>
       </div>
-      <input type="file" id="fileTpl" accept=".xlsx,.xlsm,.xls,.csv" class="hidden" />
+      <input type="file" id="fileTpl" class="hidden" />
       <div id="tplInfo"></div>
     </section>
   </div>
@@ -255,6 +255,46 @@ function toast(kind, msg){
   el.textContent = msg;
   $("toasts").appendChild(el);
   setTimeout(() => el.remove(), 4000);
+}
+
+/* كشف العمل داخل إطار معاينة (iframe) حيث قد تُحجب التنزيلات التلقائية */
+const IN_FRAME = (function(){ try { return window.self !== window.top; } catch(e){ return true; } })();
+
+let _saveModal = null;
+function showSaveModal(url, filename){
+  if (_saveModal) _saveModal.remove();
+  const wrap = document.createElement("div");
+  wrap.style.cssText = "position:fixed;inset:0;background:rgba(16,36,59,.55);display:flex;align-items:center;justify-content:center;z-index:9999";
+  const card = document.createElement("div");
+  card.style.cssText = "background:#fff;border-radius:14px;max-width:460px;width:calc(100% - 40px);padding:26px 24px;text-align:center;box-shadow:0 18px 50px rgba(16,36,59,.3)";
+  card.innerHTML =
+    '<div style="font-size:34px;margin-bottom:8px">📥</div>' +
+    '<div style="font-weight:800;color:#10243B;font-size:17px;margin-bottom:8px">الملف جاهز للتنزيل</div>' +
+    '<div style="color:#64748B;font-size:13.5px;line-height:1.8;margin-bottom:18px">تعمل الصفحة داخل إطار معاينة قد يمنع التنزيل التلقائي.<br>' +
+    'اضغط الزر أدناه لتنزيل <b style="color:#10243B">' + filename + '</b>، وإن لم يستجب المتصفح فافتح الصفحة في نافذة مستقلة ثم أعد التصدير.</div>' +
+    '<a href="' + url + '" download="' + filename + '" style="display:inline-block;background:#0F766E;color:#fff;font-weight:700;padding:11px 32px;border-radius:10px;text-decoration:none;margin-bottom:12px;font-size:14.5px">تنزيل الملف الآن</a>' +
+    '<div><button type="button" class="saveModalClose" style="background:none;border:none;color:#94A3B8;cursor:pointer;font-size:13px;font-family:inherit">إغلاق</button></div>';
+  wrap.appendChild(card);
+  document.body.appendChild(wrap);
+  _saveModal = wrap;
+  wrap.addEventListener("click", (e) => {
+    if (e.target === wrap || (e.target instanceof HTMLElement && e.target.classList.contains("saveModalClose"))) { wrap.remove(); _saveModal = null; }
+  });
+}
+
+function saveBlob(blob, filename, okMsg){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  if (IN_FRAME){
+    // التنزيل التلقائي قد يكون محجوباً داخل الإطار — نعرض نافذة تنزيل صريحة
+    showSaveModal(url, filename);
+    toast("ok", "الملف جاهز — استخدم زر «تنزيل الملف الآن» إذا لم يبدأ التنزيل تلقائياً");
+  } else {
+    toast("ok", okMsg);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
 }
 
 function cellStr(v){
@@ -420,27 +460,107 @@ function suggestMapping(sourceCols, targetCols, samples){
 }
 
 /* ================================================================
-   قراءة الملفات (SheetJS)
+   قراءة الملفات (SheetJS) — تقبل أي ملف بعدة محاولات
 ================================================================ */
 function detectHeaderRow(aoa){
-  // أول صف فيه خليتان غير فارغتين على الأقل ضمن أول 10 صفوف
-  for(let i=0;i<Math.min(10,aoa.length);i++){
+  const limit=Math.min(15,aoa.length);
+  // المحاولة الأولى: أول صف فيه خليتان غير فارغتين على الأقل
+  for(let i=0;i<limit;i++){
     const filled=(aoa[i]||[]).filter(v=>cellStr(v)!=="").length;
     if(filled>=2) return i;
   }
+  // المحاولة الثانية: أول صف فيه خلية واحدة على الأقل (ملفات العمود الواحد)
+  for(let i=0;i<limit;i++){
+    const filled=(aoa[i]||[]).filter(v=>cellStr(v)!=="").length;
+    if(filled>=1) return i;
+  }
   return 0;
+}
+
+/* تقييم جودة النص المقروء: يكشف الترميز الخاطئ (أحرف مشوهة) */
+function scoreWorkbook(wb){
+  try{
+    const sheet=firstDataSheet(wb);
+    const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sheet],{header:1,defval:"",raw:false});
+    const text=aoa.slice(0,6).map(r=>(r||[]).map(cellStr).join(" ")).join(" ");
+    let score=0, mojibake=0, highLatin=0, letters=0;
+    for(const ch of text){
+      const c=ch.codePointAt(0);
+      if(/\s/.test(ch)) continue;
+      letters++;
+      if(c>=0x0600&&c<=0x06FF) score+=2;          // عربية سليمة
+      else if((c>=0x0041&&c<=0x007A)||(c>=0x0030&&c<=0x0039)) score+=1; // لاتينية/أرقام
+      else if(c===0xFFFD){ score-=5; mojibake++; } // بديل ترميز فاشل
+      else if(c>=0x2E80&&c<=0x9FFF){ score-=3; mojibake++; }  // صينية/يابانية = تشويه
+      else if(c>=0xAC00&&c<=0xD7AF){ score-=3; mojibake++; }  // كورية = تشويه
+      else if(c>=0x0100&&c<=0x024F){ score-=2; mojibake++; }  // لاتينية ممددة = تشويه
+      else if(c>=0x0080&&c<=0x00FF) highLatin++;              // لاتينية-1: تشويه إذا كثرت
+    }
+    /* النمط الكلاسيكي للتشويه: ÇáÇÓã أو Ø§ÙØ§Ø³Ù — كثافة عالية من أحرف لاتينية-1
+       بينما النص الفرنسي السليم مثلاً تكون نسبته منها منخفضة */
+    if(letters>=6 && highLatin/letters>0.3){ score-=10; mojibake+=5; }
+    return {score,mojibake};
+  }catch(err){ return {score:-999,mojibake:99}; }
 }
 
 function readWorkbook(file, cb){
   const fr=new FileReader();
   fr.onload=(e)=>{
-    try{
-      const wb=XLSX.read(new Uint8Array(e.target.result),{cellDates:true});
-      cb(null,wb);
-    }catch(err){ cb("تعذر قراءة الملف: "+err.message); }
+    const bytes=new Uint8Array(e.target.result);
+    let best=null, bestScore=-Infinity, lastErr=null;
+
+    /* هل المحتوى نصي؟ (لا يحتوي بايتات صفرية في أول 4KB)
+       ملفات zip/xls الثنائية تحتوي أصفاراً — ملفات CSV/HTML لا */
+    let looksText=true;
+    for(let i=0;i<Math.min(bytes.length,4096);i++){
+      if(bytes[i]===0){ looksText=false; break; }
+    }
+
+    /* محاولات متدرجة تغطي كل الصيغ الواقعية:
+       1) قراءة قياسية (xlsx / xlsm / xls / ods / csv بترميز UTF-8 / html)
+       2) للملفات النصية: فك الترميز العربي القديم windows-1256 ثم قراءة نصية
+       3) للملفات النصية: فك UTF-8 صراحة ثم قراءة نصية
+       4) سلسلة بايتات خام كحل أخير
+       بعد كل محاولة ناجحة نقيّم جودة النص؛ إن ظهر تشويه ترميز نجرب التالي */
+    const attempts=[
+      ()=>XLSX.read(bytes,{type:"array",cellDates:true,codepage:65001}),
+    ];
+    if(looksText){
+      attempts.push(()=>XLSX.read(new TextDecoder("windows-1256").decode(bytes),{type:"string",cellDates:true}));
+      attempts.push(()=>XLSX.read(new TextDecoder("utf-8").decode(bytes),{type:"string",cellDates:true}));
+    }
+    attempts.push(()=>{
+      let bin=""; const CH=8192;
+      for(let i=0;i<bytes.length;i+=CH) bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+CH));
+      return XLSX.read(bin,{type:"binary",cellDates:true});
+    });
+
+    for(const fn of attempts){
+      try{
+        const w=fn();
+        if(!(w && w.SheetNames && w.SheetNames.length)) continue;
+        const {score,mojibake}=scoreWorkbook(w);
+        if(score>bestScore){ bestScore=score; best=w; }
+        // نتيجة نظيفة (بلا تشويه وفيها نص مقروء) → نكتفي
+        if(mojibake===0 && score>0) { best=w; break; }
+      }catch(err){ lastErr=err; }
+    }
+    if(best) cb(null,best);
+    else cb("تعذر قراءة «"+file.name+"» — تأكد أنه ملف Excel أو CSV صالح وغير محمي بكلمة مرور"+(lastErr?" ("+lastErr.message+")":""));
   };
-  fr.onerror=()=>cb("تعذر قراءة الملف");
+  fr.onerror=()=>cb("تعذر قراءة الملف من القرص");
   fr.readAsArrayBuffer(file);
+}
+
+/* اختيار أول ورقة عمل تحتوي بيانات فعلياً (تخطي الأوراق الفارغة) */
+function firstDataSheet(wb){
+  for(const n of wb.SheetNames){
+    try{
+      const aoa=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:"",raw:false});
+      if(aoa.some(r=>(r||[]).some(v=>cellStr(v)!==""))) return n;
+    }catch(err){ /* ورقة غير مقروءة — نتخطاها */ }
+  }
+  return wb.SheetNames[0];
 }
 
 function loadSheetData(wb, sheetName){
@@ -474,7 +594,7 @@ function onDataFile(file){
   readWorkbook(file,(err,wb)=>{
     if(err){ toast("err",err); return; }
     state.dataWB=wb;
-    state.dataSheet=wb.SheetNames[0];
+    state.dataSheet=firstDataSheet(wb);
     const d=loadSheetData(wb,state.dataSheet);
     Object.assign(state,{dataCols:d.cols,dataRows:d.rows,dataHeaderRow:d.headerRow,dataSamples:d.samples});
     // معلومات الملف + اختيار الورقة
@@ -510,7 +630,7 @@ function resetData(){
 function onTplFile(file){
   readWorkbook(file,(err,wb)=>{
     if(err){ toast("err",err); return; }
-    state.tplWB=wb; state.tplSheet=wb.SheetNames[0];
+    state.tplWB=wb; state.tplSheet=firstDataSheet(wb);
     const d=loadSheetData(wb,state.tplSheet);
     state.tplHeaderRow=d.headerRow;
     state.tplCols=d.cols.map(name=>({
@@ -698,19 +818,15 @@ $("btnXlsx").addEventListener("click",()=>{
   if(!wb.Workbook) wb.Workbook={};
   wb.Workbook.Views=[{RTL:true}];               // ورقة باتجاه RTL
   XLSX.utils.book_append_sheet(wb,buildSheet(),state.tplSheet||"النتيجة");
-  XLSX.writeFile(wb,"النتيجة-المحول-الذكي.xlsx");
-  toast("ok","تم تحميل ملف Excel");
+  const out=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  const blob=new Blob([out],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  saveBlob(blob,"النتيجة-المحول-الذكي.xlsx","تم تحميل ملف Excel ✓");
 });
 $("btnCsv").addEventListener("click",()=>{
   if(!state.result.length){ toast("err","لا توجد بيانات للتصدير"); return; }
   const csv=XLSX.utils.sheet_to_csv(buildSheet());
   const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});   // BOM لسلامة العربية
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(blob);
-  a.download="النتيجة-المحول-الذكي.csv";
-  a.click();
-  setTimeout(()=>URL.revokeObjectURL(a.href),3000);
-  toast("ok","تم تصدير CSV");
+  saveBlob(blob,"النتيجة-المحول-الذكي.csv","تم تصدير CSV ✓");
 });
 $("btnPdf").addEventListener("click",()=>{
   if(!state.result.length){ toast("err","لا توجد بيانات للتصدير"); return; }
@@ -722,6 +838,17 @@ $("btnPdf").addEventListener("click",()=>{
 ================================================================ */
 bindDrop("dropData","fileData",onDataFile);
 bindDrop("dropTpl","fileTpl",onTplFile);
+
+/* تنبيه عند العرض داخل إطار معاينة: التنزيل التلقائي قد يكون محجوباً */
+if (IN_FRAME){
+  const bar = document.createElement("div");
+  bar.style.cssText = "background:#FFFBEB;border-bottom:1px solid #FDE68A;color:#92400E;font-size:13px;line-height:1.7;padding:9px 18px;text-align:center";
+  bar.innerHTML = "تنبيه: الصفحة معروضة داخل إطار معاينة — إذا لم يبدأ تنزيل الملفات تلقائياً عند التصدير، استخدم زر «تنزيل الملف الآن» في النافذة التي تظهر، أو افتح الصفحة في نافذة مستقلة.";
+  document.body.prepend(bar);
+}
+
+/* منع المتصفح من فتح الملف إذا أُفلت خارج مناطق الإفلات */
+["dragover","drop"].forEach(ev=>document.addEventListener(ev,e=>e.preventDefault()));
 </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a5e04bc45e770b09',t:'MTc5NTI3MDQxNg=='};var l=window.parent.location,o;try{o=new URL(l.origin).origin}catch(e){try{o=new URL(new URL(l.href).origin).origin}catch(e){o=''}}var u='/cdn-cgi/challenge-platform/scripts/jsd/main.js?ray=a5e04bc45e770b09',a=document.createElement('script');a.src=o?new URL(u,o).href:u;document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
